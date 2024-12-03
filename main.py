@@ -33,6 +33,7 @@ def main():
 
     def entry_submit(event=None):
         print("Test")
+        print("Test2")
 
     entry.bind("<Return>", entry_submit)
 
