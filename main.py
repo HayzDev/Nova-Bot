@@ -1,8 +1,8 @@
 from openai import OpenAI
-from dotenv import load_dotenv
 import os
 import tkinter as tk
 import pyautogui
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -25,19 +25,21 @@ def main():
     root.geometry(window_pos)
     root.geometry(str(window_width) + "x" + str(window_height))
 
-    entry_frame = tk.Frame(root)
-    entry_frame.grid(column=0, row=0)
+    entry_frame = tk.Frame(root, background="black")
+    entry_frame.grid(column=0, row=0, sticky="news")
 
-    entry = tk.Entry(entry_frame)
-    entry.grid(column=0, row=0)
+    root.columnconfigure(0, weight=1)
 
     def entry_submit(event=None):
         print("Test")
 
-    entry.bind("<Return>", entry_submit)
+    entry = tk.Entry(entry_frame)
+    entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     button = tk.Button(entry_frame, text="Start", command=entry_submit, borderwidth=1)
-    button.grid(column=1, row=0)
+    button.pack(side=tk.LEFT)
+
+    entry.bind("<Return>", entry_submit)
 
     root.mainloop()
 
