@@ -3,6 +3,7 @@ import os
 import tkinter as tk
 import pyautogui
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -11,33 +12,93 @@ client = OpenAI(
 )
 
 window_width = 800
-window_height = 100
+window_height = 50
 
 screen_width, screen_height = pyautogui.size()
 
 pyautogui.moveTo(screen_width / 2, screen_height / 2)
 
+ai_model = "gpt-4o"
+ai_max_tokens = 10000
+
+
+def single_prompt(prompt):
+    """Returns response text and code blocks from OpenAI API completion"""
+    response = client.chat.completions.create(
+        model=ai_model,
+        max_tokens=ai_max_tokens,
+        messages=[
+            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "user", "content": prompt},
+        ]
+    )
+
+    response_text = response.choices[0].message.content.strip()
+
+    if "```" in response_text:
+
+        remove_cb_language = re.sub(r"(?<=```)(.*)(?=\n)", "", response_text)
+        code_blocks = re.findall(r"(?<=```\n)([\s\S]*?)(?=\n```)(?=\n)", remove_cb_language)
+        replace_text = re.sub(r"(```.*)(?=\n)", "", response_text)
+
+        return replace_text, code_blocks
+
+    return response_text, None
+
 
 def main():
     root = tk.Tk()
+    root.resizable(False, False)
+    root.configure(padx=5, pady=5, background="black")
+
+    # Create widgets
 
     window_pos = "+" + str(round(screen_width / 2 - 0.5 * window_width)) + "+" + str(round(screen_height / 2 - 0.5 * window_height))
     root.geometry(window_pos)
     root.geometry(str(window_width) + "x" + str(window_height))
 
     entry_frame = tk.Frame(root, background="black")
-    entry_frame.grid(column=0, row=0, sticky="news")
+    entry_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
     root.columnconfigure(0, weight=1)
 
+    entry_container = tk.Frame(entry_frame, background="#131313")
+    entry_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+    entry = tk.Entry(entry_container, background=entry_container.cget("bg"), foreground="white", insertbackground="white", borderwidth=0)
+    entry.pack(fill=tk.BOTH, expand=True, padx=5)
+    entry.focus_set()
+
+    root.update()
+    entry.configure(font=f"Arial {str(entry.winfo_height() - 20)}")
+
+    output_label = tk.Label(root, background="black", foreground="white")
+
     def entry_submit(event=None):
-        print("Test")
+        entry_text = entry.get().strip()
+        entry.delete(0, tk.END)
 
-    entry = tk.Entry(entry_frame)
-    entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Check for commands
+        if entry_text == "/exit":
+            root.destroy()
+            return
 
-    button = tk.Button(entry_frame, text="Start", command=entry_submit, borderwidth=1)
-    button.pack(side=tk.LEFT)
+        ai_response, code_blocks = single_prompt(entry_text)
+
+        if code_blocks:
+            print(code_blocks[0])
+        else:
+            print(ai_response)
+
+        output_label.config(text=ai_response)
+        output_label.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        root.update()
+        print(output_label.winfo_reqheight())
+        root.geometry(str(window_width) + "x" + str(window_height + output_label.winfo_reqheight() + 20))
+
+    button = tk.Button(entry_frame, text="Run", command=entry_submit, background=entry_container.cget("bg"), foreground="white", borderwidth=0, width=5)
+    button.pack(side=tk.LEFT, fill=tk.Y)
 
     entry.bind("<Return>", entry_submit)
 
