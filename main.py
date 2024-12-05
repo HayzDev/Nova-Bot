@@ -1,9 +1,12 @@
+from PIL import Image, ImageTk
+import keyboard
 from openai import OpenAI
 import os
 import tkinter as tk
 import pyautogui
 from dotenv import load_dotenv
 import re
+import pyperclip
 
 load_dotenv()
 
@@ -16,11 +19,14 @@ window_height = 50
 
 screen_width, screen_height = pyautogui.size()
 
-pyautogui.moveTo(screen_width / 2, screen_height / 2)
-
 ai_model = "gpt-4o"
-ai_max_tokens = 10000
+ai_max_tokens = 5000
 
+def entry_ctrl_bs(event):
+    ent = event.widget
+    end_idx = ent.index(tk.INSERT)
+    start_idx = ent.get().rfind(" ", None, end_idx)
+    ent.selection_range(start_idx, end_idx)
 
 def single_prompt(prompt):
     """Returns response text and code blocks from OpenAI API completion"""
@@ -48,8 +54,13 @@ def single_prompt(prompt):
 
 def main():
     root = tk.Tk()
+    root.title("Nova Bot")
     root.resizable(False, False)
     root.configure(padx=5, pady=5, background="black")
+    root.overrideredirect(True)
+
+    root.bind("<FocusOut>", lambda x: root.destroy())
+    root.bind("<Escape>", lambda x: root.destroy())
 
     # Create widgets
 
@@ -66,6 +77,7 @@ def main():
     entry_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
     entry = tk.Entry(entry_container, background=entry_container.cget("bg"), foreground="white", insertbackground="white", borderwidth=0)
+    entry.bind("<Control-BackSpace>", entry_ctrl_bs)
     entry.pack(fill=tk.BOTH, expand=True, padx=5)
     entry.focus_set()
 
@@ -87,6 +99,7 @@ def main():
 
         if code_blocks:
             print(code_blocks[0])
+            pyperclip.copy(code_blocks[0])
         else:
             print(ai_response)
 
@@ -105,5 +118,9 @@ def main():
     root.mainloop()
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
+
+keyboard.add_hotkey("ctrl+shift+m", main, suppress=True, trigger_on_release=True)
+while True:
+    pass
