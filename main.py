@@ -1,5 +1,4 @@
 from PIL import Image
-import time
 import pystray
 from box import Box
 import keyboard
