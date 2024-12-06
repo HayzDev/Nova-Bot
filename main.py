@@ -14,6 +14,7 @@ import webbrowser
 import json
 import yaml
 import sys
+import threading
 
 load_dotenv()
 
@@ -71,7 +72,6 @@ tools = [
 
 
 def create_tray_icon():
-    print("Creating Tray Icon...")
     icon_image = Image.open("./assets/tray_icon.png")
     icon = pystray.Icon("Nova Bot", icon_image, "Nova Bot")
 
@@ -86,7 +86,11 @@ def create_tray_icon():
         pystray.MenuItem('Exit', stop_script)
     )
 
-    icon.run()
+    def run_icon():
+        icon.run()
+
+    icon_thread = threading.Thread(target=run_icon, daemon=True)
+    icon_thread.start()
 
 
 def entry_ctrl_bs(event):
@@ -258,7 +262,7 @@ def main():
 
 
 if __name__ == '__main__':
-    # create_tray_icon()
+    create_tray_icon()
     main()
 
 try:
