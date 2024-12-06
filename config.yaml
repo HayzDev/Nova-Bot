@@ -1,0 +1,11 @@
+
+command_bar_width: 800
+command_bar_height: 50
+
+OPENAI_API_KEY: null #Put your API key here or create a .env file and add the variable OPENAI_API_KEY and set the value to your API key
+ai_model: gpt-4o
+ai_max_tokens: 5000
+
+preset_messages:
+  - role: system
+    content: You are a helpful AI assistant. When the user asks for you to generate any text, return the specified text inside a codeblock.
