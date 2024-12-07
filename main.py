@@ -18,6 +18,7 @@ from openai import OpenAI
 from tkinter import messagebox
 from dotenv import load_dotenv
 
+
 class NovaBot:
     def __init__(self):
         load_dotenv()
