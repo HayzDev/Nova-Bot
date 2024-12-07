@@ -2,8 +2,8 @@
 <img src="assets/tray_icon.png" width="15%" alt="Nova Bot Logo">
 </p>
 
-<h1 style="text-align: center;">Nova Bot</h1>
-<p style="text-align: center;">Python Desktop AI Assistant</p>
+<h1 align="center"">Nova Bot</h1>
+<p align="center">Python Desktop AI Assistant</p>
 
 <div align="center">
   <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/HayzDev/Nova-Bot">
