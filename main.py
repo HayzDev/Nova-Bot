@@ -259,7 +259,7 @@ class NovaBot:
         self.root.bind("<FocusOut>", self.hide_window)
         self.root.bind("<Escape>", self.hide_window)
 
-        keyboard.add_hotkey("ctrl+shift+m", self.show_window, suppress=True, trigger_on_release=True)
+        keyboard.add_hotkey(self.conf["command_bar_shortcut"], self.show_window, suppress=True, trigger_on_release=True)
 
     def hide_window(self, event=None):
         self.root.withdraw()
