@@ -19,6 +19,8 @@
     With Nova Bot, you can have a fast AI chatbot multi tool at 
     your fingertips. One useful feature is automatically copying
 </div>
+<br>
+The default keyboard shortcut to open the Command Bar is `Ctrl+Shift+Space`
 
 ## AI Features
 
