@@ -1,273 +1,328 @@
+import tkinter as tk
+from os import _exit
+
+import keyboard
+import pyautogui
+import pyperclip
+import threading
+import sys
+import os
+import re
+import json
+import yaml
+import webbrowser
 from PIL import Image
 import pystray
 from box import Box
-import keyboard
 from openai import OpenAI
-import os
-import tkinter as tk
 from tkinter import messagebox
-import pyautogui
 from dotenv import load_dotenv
-import re
-import pyperclip
-import webbrowser
-import json
-import yaml
-import sys
-import threading
 
-load_dotenv()
+class NovaBot:
+    def __init__(self):
+        load_dotenv()
 
-conf = Box.from_yaml(filename="./config.yaml", Loader=yaml.FullLoader)
+        with open("./config/memory.json") as f:
+            self.memories = json.load(f)
 
+        self.conf = Box.from_yaml(filename="./config/config.yaml", Loader=yaml.FullLoader)
+        self.check_api_key()
+        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY") or self.conf['OPENAI_API_KEY'])
+        
+        self.window_width = self.conf["command_bar_width"]
+        self.window_height = self.conf["command_bar_height"]
+        self.screen_width, self.screen_height = pyautogui.size()
+        self.ai_model = self.conf["ai_model"]
+        self.ai_max_tokens = self.conf["ai_max_tokens"]
+        self.messages = list(self.conf["preset_messages"])
 
-if not (os.getenv("OPENAI_API_KEY") or conf['OPENAI_API_KEY']):
-    temp_root = tk.Tk()
-    temp_root.withdraw()
-    messagebox.showerror("Error", "Missing OpenAI API Key. Please set it in your environment variables or config.yaml.")
+        self.memory_message_content = "Your memories: "
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY") or conf['OPENAI_API_KEY'],
-)
+        for memory in self.memories:
+            self.memory_message_content += f"\n{memory}"
 
-# AI Called Functions
+        self.memory_message = {"role": "system", "content": self.memory_message_content}
 
+        self.messages.append(self.memory_message)
 
-def open_link(url):
-    webbrowser.open(url)
-    return "Link opened: " + url
-
-
-window_width = conf["command_bar_width"]
-window_height = conf["command_bar_height"]
-
-screen_width, screen_height = pyautogui.size()
-
-ai_model = conf["ai_model"]
-ai_max_tokens = conf["ai_max_tokens"]
-
-messages = list(conf["preset_messages"])
-
-# AI Stuff
-
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "open_link",
-            "description": "opens a link in the default web browser",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string"}
-                },
-                "required": ["url"],
-                "additionalProperties": False
+        self.tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "open_link",
+                    "description": "opens a link in the default web browser",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"}
+                        },
+                        "required": ["url"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "text_type",
+                    "description": "types the given text",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"}
+                        },
+                        "required": ["text"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "add_memory",
+                    "description": "adds a memory to the list of memories",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"}
+                        },
+                        "required": ["text"],
+                        "additionalProperties": False
+                    }
+                }
             }
-        }
-    }
-]
+        ]
+        
+        self.root = None
+        self.output_window = None
+        self.entry = None
+        self.output_label = None
 
-# Function Stuff
+    def check_api_key(self):
+        if not (os.getenv("OPENAI_API_KEY") or self.conf['OPENAI_API_KEY']):
+            temp_root = tk.Tk()
+            temp_root.withdraw()
+            messagebox.showerror("Error", "Missing OpenAI API Key. Please set it in your environment variables or config.yaml.")
 
+    @staticmethod
+    def open_link(url):
+        webbrowser.open(url)
+        return "Link opened: " + url
 
-def create_tray_icon():
-    icon_image = Image.open("./assets/tray_icon.png")
-    icon = pystray.Icon("Nova Bot", icon_image, "Nova Bot")
+    def text_type(self, text):
+        pyautogui.typewrite(text, self.conf['type_speed'])
+        return "Text typed: " + text
 
-    def stop_script():
-        print("Exiting application...")
-        keyboard.unhook_all()
-        icon.stop()  # Gracefully stops the tray icon
-        os._exit(0)  # Terminates the program without raising SystemExit
+    def add_memory(self, text):
+        self.memories.append(text)
+        with open("./config/memory.json", 'w', encoding='utf-8') as json_file:
+            json.dump(self.memories, json_file, ensure_ascii=False, indent=4)
 
-    # Assign the menu to the tray icon
-    icon.menu = pystray.Menu(
-        pystray.MenuItem('Exit', stop_script)
-    )
+    @staticmethod
+    def create_tray_icon():
+        icon_image = Image.open("./assets/tray_icon.png")
+        icon = pystray.Icon("Nova Bot", icon_image, "Nova Bot")
 
-    def run_icon():
-        icon.run()
+        def stop_script():
+            print("Exiting application...")
+            keyboard.unhook_all()
+            icon.stop()
+            _exit(0)
 
-    icon_thread = threading.Thread(target=run_icon, daemon=True)
-    icon_thread.start()
+        icon.menu = pystray.Menu(pystray.MenuItem('Exit', stop_script))
 
+        def run_icon():
+            icon.run()
 
-def entry_ctrl_bs(event):
-    ent = event.widget
-    end_idx = ent.index(tk.INSERT)
-    start_idx = ent.get().rfind(" ", None, end_idx)
-    ent.selection_range(start_idx, end_idx)
+        icon_thread = threading.Thread(target=run_icon, daemon=True)
+        icon_thread.start()
 
+    @staticmethod
+    def entry_ctrl_bs(event):
+        ent = event.widget
+        end_idx = ent.index(tk.INSERT)
+        start_idx = ent.get().rfind(" ", None, end_idx)
+        ent.selection_range(start_idx, end_idx)
 
-def single_prompt(prompt):
-    messages.append(
-        {"role": "user", "content": prompt}
-    )
-    """Returns response text and code blocks from OpenAI API completion"""
-    response = client.chat.completions.create(
-        model=ai_model,
-        max_tokens=ai_max_tokens,
-        messages=messages,
-        tools=tools,
-    )
+    def single_prompt(self, prompt):
+        self.messages.append({"role": "user", "content": prompt})
+        response = self.client.chat.completions.create(
+            model=self.ai_model,
+            max_tokens=self.ai_max_tokens,
+            messages=self.messages,
+            tools=self.tools,
+        )
 
-    response_message = response.choices[0].message
-    tool_calls = response_message.tool_calls
+        response_message = response.choices[0].message
+        tool_calls = response_message.tool_calls
 
-    if tool_calls:
-        messages.append(response_message)
+        if tool_calls:
+            self.messages.append(response_message)
+            available_functions = {
+                'open_link': self.open_link,
+                'text_type': self.text_type,
+                'add_memory': self.add_memory,
+            }
 
-        available_functions = {
-            'open_link': open_link,
-        }
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_to_call = available_functions.get(function_name)
 
-        for tool_call in tool_calls:
-            function_name = tool_call.function.name
-            function_to_call = available_functions.get(function_name)
+                if function_to_call:
+                    function_response = None
+                    function_args = json.loads(tool_call.function.arguments)
+                    if function_name == 'open_link' and 'url' in function_args:
+                        function_response = function_to_call(function_args['url'])
+                    elif function_name == 'text_type' and 'text' in function_args:
+                        self.root.withdraw()
+                        function_response = function_to_call(function_args['text'])
+                    elif function_name == 'add_memory' and 'text' in function_args:
+                        function_to_call(function_args['text'])
+                    else:
+                        function_response = "Error: Invalid function call or missing required arguments."
 
-            if function_to_call:
-                function_args = json.loads(tool_call.function.arguments)
-                if function_name == 'open_link' and 'url' in function_args:
-                    function_response = function_to_call(url=function_args['url'])
-                else:
-                    function_response = "Error: Invalid function call or missing required arguments."
+                    if function_response is None:
+                        function_response = "The requested action was performed successfully."
 
-                # Ensure `function_response` is always a string
-                if function_response is None:
-                    function_response = "The requested action was performed successfully."
-
-                messages.append(
-                    {
+                    self.messages.append({
                         'tool_call_id': tool_call.id,
                         'role': 'tool',
                         'name': function_name,
                         'content': str(function_response),
-                    }
-                )
+                    })
 
-        response_2 = client.chat.completions.create(
-            model=ai_model,
-            messages=messages,
-        )
+            response_2 = self.client.chat.completions.create(
+                model=self.ai_model,
+                messages=self.messages,
+            )
 
-        return response_2.choices[0].message.content.strip(), None
+            return response_2.choices[0].message.content.strip(), None
 
-    messages.append(response_message)
-    response_text = response_message.content.strip()
+        self.messages.append(response_message)
+        response_text = response_message.content.strip()
 
-    if "```" in response_text:
-        remove_cb_language = re.sub(r"(?<=```)(.*)(?=\n)", "", response_text)
-        code_blocks = re.findall(r"(?<=```\n)([\s\S]*?)(?=\n```)(?=\n)", remove_cb_language)
-        replace_text = re.sub(r"(```.*)", "", response_text)
+        if "```" in response_text:
+            remove_cb_language = re.sub(r"(?<=```)(.*)(?=\n)", "", response_text)
+            code_blocks = re.findall(r"(?<=```\n)([\s\S]*?)(?=\n```)(?=\n)", remove_cb_language)
+            replace_text = re.sub(r"(```.*)", "", response_text)
+            return replace_text, code_blocks
 
-        return replace_text, code_blocks
+        return response_text, None
 
-    return response_text, None
+    def setup_ui(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+        self.root.title("Nova Bot")
+        self.root.resizable(False, False)
+        self.root.configure(padx=5, pady=5, background="black")
+        self.root.overrideredirect(True)
 
+        self.output_window = tk.Toplevel(self.root)
+        self.output_window.title("Output")
+        self.output_window.configure(background="black", padx=5, pady=5)
+        self.output_window.geometry(f"{self.window_width}x{self.window_height}")
+        output_window_pos = "+" + str(round(self.screen_width / 2 - 0.5 * self.window_width)) + "+" + str(
+            round((self.screen_height / 2 - 0.5 * self.window_height) + 70))
+        self.output_window.geometry(output_window_pos)
+        self.output_window.overrideredirect(True)
+        self.output_window.withdraw()
 
-def main():
+        window_pos = "+" + str(round(self.screen_width / 2 - 0.5 * self.window_width)) + "+" + str(round(self.screen_height / 2 - 0.5 * self.window_height))
+        self.root.geometry(window_pos)
+        self.root.geometry(f"{self.window_width}x{self.window_height}")
 
-    root = tk.Tk()
-    root.withdraw()
-    root.title("Nova Bot")
-    root.resizable(False, False)
-    root.configure(padx=5, pady=5, background="black")
-    root.overrideredirect(True)
+        entry_frame = tk.Frame(self.root, background="black")
+        entry_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-    # Create widgets
+        self.root.columnconfigure(0, weight=1)
 
-    window_pos = "+" + str(round(screen_width / 2 - 0.5 * window_width)) + "+" + str(round(screen_height / 2 - 0.5 * window_height))
-    root.geometry(window_pos)
-    root.geometry(str(window_width) + "x" + str(window_height))
+        entry_container = tk.Frame(entry_frame, background="#131313")
+        entry_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-    entry_frame = tk.Frame(root, background="black")
-    entry_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.entry = tk.Entry(entry_container, background=entry_container.cget("bg"), foreground="white", insertbackground="white", borderwidth=0)
+        self.entry.bind("<Control-BackSpace>", self.entry_ctrl_bs)
+        self.entry.pack(fill=tk.BOTH, expand=True, padx=5)
 
-    root.columnconfigure(0, weight=1)
+        self.root.update()
+        self.entry.configure(font=f"Arial {str(self.entry.winfo_height() - 20)}")
 
-    entry_container = tk.Frame(entry_frame, background="#131313")
-    entry_container.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        self.output_label = tk.Label(self.output_window, background="black", foreground="white", wraplength=self.window_width - 20)
+        self.output_label.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-    entry = tk.Entry(entry_container, background=entry_container.cget("bg"), foreground="white", insertbackground="white", borderwidth=0)
-    entry.bind("<Control-BackSpace>", entry_ctrl_bs)
-    entry.pack(fill=tk.BOTH, expand=True, padx=5)
+        button = tk.Button(entry_frame, text="Run", command=self.entry_submit, background=entry_container.cget("bg"),
+                           foreground="white", borderwidth=0, width=5)
+        button.pack(side=tk.LEFT, fill=tk.Y)
 
-    root.update()
-    entry.configure(font=f"Arial {str(entry.winfo_height() - 20)}")
+        self.entry.bind("<Return>", self.entry_submit)
 
-    # Create functions
+        self.root.bind("<FocusOut>", self.hide_window)
+        self.root.bind("<Escape>", self.hide_window)
 
-    def hide_window(event=None):
-        root.withdraw()
+        keyboard.add_hotkey("ctrl+shift+m", self.show_window, suppress=True, trigger_on_release=True)
 
-    def show_window(event=None):
-        root.deiconify()
-        root.lift()
-        root.focus_force()
-        root.after(50, lambda *args: entry.focus_set())  # type: ignore
+    def hide_window(self, event=None):
+        self.root.withdraw()
+        self.output_window.withdraw()
 
-    root.bind("<FocusOut>", hide_window)
-    root.bind("<Escape>", hide_window)
+    def show_window(self, event=None):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+        self.root.attributes('-topmost', True)  # Make the window stay on top
+        self.root.after(10, lambda: self.root.attributes('-topmost', False))  # Disable topmost after a short delay
+        self.root.after(50, lambda: self.entry.focus_set())
+        # Unbind the FocusOut event temporarily
+        self.root.unbind("<FocusOut>")
+        # Rebind the FocusOut event after a short delay
+        self.root.after(100, lambda: self.root.bind("<FocusOut>", self.hide_window))
 
-    hide_window()
+    def entry_submit(self, event=None):
+        entry_text = self.entry.get().strip()
+        self.entry.delete(0, tk.END)
 
-    keyboard.add_hotkey("ctrl+shift+m", show_window, suppress=True, trigger_on_release=True)
-
-    output_label = tk.Label(root, background="black", foreground="white", wraplength=window_width - 20)
-
-    def entry_submit(event=None):
-
-        global messages
-        nonlocal output_label
-
-        entry_text = entry.get().strip()
-        entry.delete(0, tk.END)
-
-        # Check for commands
         if entry_text == "/exit":
-            root.destroy()
+            self.root.destroy()
             keyboard.unhook_all()
             sys.exit()
         elif entry_text == "/clrmsg":
-            messages = list(conf["preset_messages"])
-            output_label.destroy()
-            output_label = tk.Label(root, background="black", foreground="white", wraplength=window_width - 20)
-
-            root.update()
-            root.geometry(str(window_width) + "x" + str(window_height))
+            self.messages = list(self.conf["preset_messages"])
+            self.output_label.destroy()
+            self.output_label = tk.Label(self.root, background="black", foreground="white", wraplength=self.window_width - 20)
+            self.root.update()
+            self.root.geometry(f"{self.window_width}x{self.window_height}")
             return
 
-        ai_response, code_blocks = single_prompt(entry_text)
+        ai_response, code_blocks = self.single_prompt(entry_text)
+
+        self.output_window.withdraw()
 
         if code_blocks:
             print(code_blocks[0])
             pyperclip.copy(code_blocks[0])
-            output_label.config(text=ai_response + "\n<copied text to clipboard>")
+            self.output_label.config(text=ai_response + "\n<copied text to clipboard>")
         else:
             print(ai_response)
-            output_label.config(text=ai_response)
+            self.output_label.config(text=ai_response)
 
-        output_label.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=(0, 5))
+        self.output_window.deiconify()
+        self.output_window.lift()
+        self.output_window.update()
+        self.output_window.geometry(f"{self.window_width}x{self.window_height + self.output_label.winfo_reqheight()}")
 
-        root.update()
-        root.geometry(str(window_width) + "x" + str(window_height + output_label.winfo_reqheight() + 20))
+        self.output_label.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-    button = tk.Button(entry_frame, text="Run", command=entry_submit, background=entry_container.cget("bg"), foreground="white", borderwidth=0, width=5)
-    button.pack(side=tk.LEFT, fill=tk.Y)
-
-    entry.bind("<Return>", entry_submit)
-
-    root.mainloop()
-
+    def run(self):
+        self.create_tray_icon()
+        self.setup_ui()
+        self.root.mainloop()
 
 if __name__ == '__main__':
-    create_tray_icon()
-    main()
+    cmd_bar = NovaBot()
+    cmd_bar.run()
 
-try:
-    while True:
-        pass
-except KeyboardInterrupt:
-    keyboard.unhook_all()
-    sys.exit()
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        keyboard.unhook_all()
+        sys.exit()
