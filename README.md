@@ -15,7 +15,7 @@
 ## Brief Description
 
 <div style="text-align: justify">
-    **Nova Bot** is an AI Desktop Assistant, built with python.
+    <strong>Nova Bot</strong> is an AI Desktop Assistant, built with python.
     With Nova Bot, you can have a fast AI chatbot multi tool at 
     your fingertips. One useful feature is automatically copying
 </div>
